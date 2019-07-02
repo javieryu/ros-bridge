@@ -20,7 +20,7 @@ class LaneInvasionSensor(Sensor):
     Actor implementation details for a lane invasion sensor
     """
 
-    def __init__(self, carla_actor, parent, communication):
+    def __init__(self, carla_actor, parent, communication, synchronous_mode):
         """
         Constructor
 
@@ -34,6 +34,7 @@ class LaneInvasionSensor(Sensor):
         super(LaneInvasionSensor, self).__init__(carla_actor=carla_actor,
                                                  parent=parent,
                                                  communication=communication,
+                                                 synchronous_mode=synchronous_mode,
                                                  prefix="lane_invasion")
 
     # pylint: disable=arguments-differ

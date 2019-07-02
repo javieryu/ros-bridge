@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-
 #
 # Copyright (c) 2018-2019 Intel Corporation
 #
@@ -10,8 +9,7 @@
 Classes to handle Carla sensors
 """
 from abc import abstractmethod
-
-import threading
+import queue
 
 import rospy
 import carla_ros_bridge.transforms as trans
@@ -19,14 +17,13 @@ import carla_ros_bridge.transforms as trans
 
 from carla_ros_bridge.actor import Actor
 
-
 class Sensor(Actor):
 
     """
     Actor implementation details for sensors
     """
 
-    def __init__(self, carla_actor, parent, communication, prefix=None):
+    def __init__(self, carla_actor, parent, communication, synchronous_mode, prefix=None):
         """
         Constructor
 
@@ -46,8 +43,17 @@ class Sensor(Actor):
                                      communication=communication,
                                      prefix=prefix)
 
-        self.current_sensor_data = None
-        self.update_lock = threading.Lock()
+        self.synchronous_mode = synchronous_mode
+        self.queue = queue.Queue()
+        self.next_data_expected_time = None
+        self.sensor_tick_time = None
+        try:
+            self.sensor_tick_time = float(carla_actor.attributes["sensor_tick"])
+            rospy.logdebug("Sensor tick time is {}".format(self.sensor_tick_time))
+        except (KeyError, ValueError):
+            self.sensor_tick_time = None
+            pass
+    
         if self.__class__.__name__ != "Sensor":
             self.carla_actor.listen(self._callback_sensor_data)
 
@@ -63,8 +69,6 @@ class Sensor(Actor):
         rospy.logdebug("Destroy Sensor(id={})".format(self.get_id()))
         if self.carla_actor.is_listening:
             self.carla_actor.stop()
-        if self.update_lock.acquire():
-            self.current_sensor_data = None
         super(Sensor, self).destroy()
 
     def _callback_sensor_data(self, carla_sensor_data):
@@ -75,11 +79,13 @@ class Sensor(Actor):
         :type carla_sensor_data: carla.SensorData
         """
         if not rospy.is_shutdown():
-            if self.update_lock.acquire(False):
-                self.current_sensor_data = carla_sensor_data
-                self.publish_transform()
+            if self.synchronous_mode:
+                if self.sensor_tick_time:
+                    self.next_data_expected_time = carla_sensor_data.timestamp + float(self.sensor_tick_time)
+                self.queue.put(carla_sensor_data)
+            else:
+                self.publish_transform(self.get_ros_sensor_transform(carla_sensor_data.transform))
                 self.sensor_data_updated(carla_sensor_data)
-                self.update_lock.release()
 
     @abstractmethod
     def sensor_data_updated(self, carla_sensor_data):
@@ -93,10 +99,33 @@ class Sensor(Actor):
         raise NotImplementedError(
             "This function has to be implemented by the derived classes")
 
-    def get_current_ros_transform(self):
-
-        tf_msg = super(Sensor, self).get_current_ros_transform()
-        # sensor data has its own transform
-        tf_msg.transform = trans.carla_transform_to_ros_transform(
-            self.current_sensor_data.transform)
+    def get_ros_sensor_transform(self, transform):
+        tf_msg = super(Sensor, self).get_ros_transform(transform)
         return tf_msg
+
+    def update(self, frame_id, timestamp):
+#         if self.next_data_expected_time:
+            #either data was already received or we wait if data is expected
+        # either:
+        # - if no next_data_expected_time is given, simply get next data (wait if required
+        # - if next_data_expected_time is set, check  
+        if self.synchronous_mode:
+            while not self.next_data_expected_time or\
+                  (not self.queue.empty() or\
+                   self.next_data_expected_time and\
+                   self.next_data_expected_time < timestamp):
+                while True:
+                    try:
+                        carla_sensor_data = self.queue.get(timeout=1.0)
+                        if carla_sensor_data.frame == frame_id:
+                            rospy.logwarn("{}({}): process {}".format(self.__class__.__name__, self.get_id(), frame_id))
+                            self.publish_transform(self.get_ros_transform(carla_sensor_data.transform))
+                            self.sensor_data_updated(carla_sensor_data)
+                            return
+                        else:
+                            rospy.logwarn("{}({}): skipping old frame {}, expected {}".format(self.__class__.__name__, self.get_id(), carla_sensor_data.frame, frame_id))
+                    except queue.Empty:
+                        if not rospy.is_shutdown():
+                            rospy.logwarn("{}({}): Expected Frame {} not received".format(self.__class__.__name__, self.get_id(), frame_id))
+                        return
+        super(Sensor, self).update(frame_id, timestamp)

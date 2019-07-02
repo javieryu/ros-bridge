@@ -33,7 +33,7 @@ class Camera(Sensor):
     # global cv bridge to convert image between opencv and ros
     cv_bridge = CvBridge()
 
-    def __init__(self, carla_actor, parent, communication, prefix=None):
+    def __init__(self, carla_actor, parent, communication, synchronous_mode, prefix=None):
         """
         Constructor
 
@@ -51,6 +51,7 @@ class Camera(Sensor):
         super(Camera, self).__init__(carla_actor=carla_actor,
                                      parent=parent,
                                      communication=communication,
+                                     synchronous_mode=synchronous_mode,
                                      prefix=prefix)
 
         if self.__class__.__name__ == "Camera":
@@ -97,7 +98,6 @@ class Camera(Sensor):
                 (carla_image.width != self._camera_info.width)):
             rospy.logerr(
                 "Camera{} received image not matching configuration".format(self.get_prefix()))
-
         image_data_array, encoding = self.get_carla_image_data_array(
             carla_image=carla_image)
         img_msg = Camera.cv_bridge.cv2_to_imgmsg(image_data_array, encoding=encoding)
@@ -111,7 +111,7 @@ class Camera(Sensor):
         self.publish_message(
             self.get_topic_prefix() + '/' + self.get_image_topic_name(), img_msg)
 
-    def get_current_ros_transform(self):
+    def get_ros_sensor_transform(self, transform):
         """
         Function (override) to modify the tf messages sent by this camera.
 
@@ -121,7 +121,7 @@ class Camera(Sensor):
         :return: the filled tf message
         :rtype: geometry_msgs.msg.TransformStamped
         """
-        tf_msg = super(Camera, self).get_current_ros_transform()
+        tf_msg = super(Camera, self).get_ros_sensor_transform(transform)
         rotation = tf_msg.transform.rotation
         quat = [rotation.x, rotation.y, rotation.z, rotation.w]
         quat_swap = tf.transformations.quaternion_from_matrix(
@@ -167,7 +167,7 @@ class RgbCamera(Camera):
     Camera implementation details for rgb camera
     """
 
-    def __init__(self, carla_actor, parent, communication):
+    def __init__(self, carla_actor, parent, communication, synchronous_mode):
         """
         Constructor
 
@@ -181,6 +181,7 @@ class RgbCamera(Camera):
         super(RgbCamera, self).__init__(carla_actor=carla_actor,
                                         parent=parent,
                                         communication=communication,
+                                        synchronous_mode=synchronous_mode,
                                         prefix='camera/rgb/' +
                                         carla_actor.attributes.get('role_name'))
 
@@ -233,6 +234,7 @@ class DepthCamera(Camera):
         super(DepthCamera, self).__init__(carla_actor=carla_actor,
                                           parent=parent,
                                           communication=communication,
+                                          synchronous_mode=synchronous_mode,
                                           prefix='camera/depth/' +
                                           carla_actor.attributes.get('role_name'))
 

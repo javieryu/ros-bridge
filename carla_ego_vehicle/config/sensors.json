@@ -34,16 +34,6 @@
             "type": "sensor.other.gnss",
             "id": "gnss1",
             "x": 1.0, "y": 0.0, "z": 2.0
-        },
-        {
-            "type": "sensor.other.collision",
-            "id": "collision1",
-            "x": 0.0, "y": 0.0, "z": 0.0
-        },
-        {
-            "type": "sensor.other.lane_invasion",
-            "id": "laneinvasion1",
-            "x": 0.0, "y": 0.0, "z": 0.0
         }
     ]
 }

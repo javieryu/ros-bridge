@@ -20,7 +20,7 @@ class CollisionSensor(Sensor):
     Actor implementation details for a collision sensor
     """
 
-    def __init__(self, carla_actor, parent, communication):
+    def __init__(self, carla_actor, parent, communication, synchronous_mode):
         """
         Constructor
 
@@ -34,6 +34,7 @@ class CollisionSensor(Sensor):
         super(CollisionSensor, self).__init__(carla_actor=carla_actor,
                                               parent=parent,
                                               communication=communication,
+                                              synchronous_mode=synchronous_mode,
                                               prefix="collision")
 
     # pylint: disable=arguments-differ
